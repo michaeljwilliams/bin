@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+function usage {
+  cat <<'EOF'
+Usage: go cover [options] <package>
+
+Options:
+  -unitonly   Run unit tests only (omit integration tag)
+  -noopen     Generate coverage profile but do not open HTML report
+  -h, --help  Show this help message and exit
+
+Examples:
+  go cover ./internal/database
+  go cover -unitonly ./internal/resourcemonitor
+  go cover -noopen ./cmd
+EOF
+}
+
+UNIT_ONLY=false
+NO_OPEN=false
+
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -unitonly)
+      UNIT_ONLY=true
+      shift
+      ;;
+    -noopen)
+      NO_OPEN=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      ARGS+=("$@")
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 1
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${#ARGS[@]} -ne 1 ]]; then
+  echo "Error: package path is required" >&2
+  usage >&2
+  exit 1
+fi
+
+PKG_PATH="${ARGS[0]}"
+
+if [[ "$PKG_PATH" != ./* && "$PKG_PATH" != */* ]]; then
+  PKG_PATH="./$PKG_PATH"
+fi
+
+COVERAGE_FILE="${PKG_PATH%/}/coverage.out"
+
+GO_TEST_ARGS=("go" "test" "-coverprofile=$COVERAGE_FILE")
+
+if [[ "$UNIT_ONLY" == false ]]; then
+  GO_TEST_ARGS+=("-tags=integration")
+fi
+
+GO_TEST_ARGS+=("$PKG_PATH")
+
+echo "Running: ${GO_TEST_ARGS[*]}"
+"${GO_TEST_ARGS[@]}"
+
+if [[ "$NO_OPEN" == true ]]; then
+  echo "Coverage profile written to $COVERAGE_FILE"
+  exit 0
+fi
+
+echo "Opening coverage report for $PKG_PATH"
+go tool cover -html="$COVERAGE_FILE"
+
